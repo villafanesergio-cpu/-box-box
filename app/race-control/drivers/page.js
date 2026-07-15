@@ -29,6 +29,7 @@ const EMPTY_FORM = {
   active: true,
   photoBackgroundUrl: "",
   photoTransparentUrl: "",
+  celebrationMediaUrl: "",
 };
 
 function safeFileName(name) {
@@ -201,6 +202,7 @@ export default function DriversPage() {
       active: row.active,
       photoBackgroundUrl: row.photo_background_url ?? "",
       photoTransparentUrl: row.photo_transparent_url ?? "",
+      celebrationMediaUrl: row.celebration_media_url ?? "",
     });
     setFiles({ background: null, transparent: null, celebration: null });
     setMessage(`Editando ${row.name}.`);

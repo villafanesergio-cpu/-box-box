@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "../../../lib/supabase/client";
 import styles from "./race.module.css";
@@ -23,6 +23,8 @@ export default function RaceDirectionPage() {
   const [entries, setEntries] = useState([]);
   const [editingRace, setEditingRace] = useState(null);
   const [message, setMessage] = useState("Cargando Dirección de Carrera...");
+  const [opening, setOpening] = useState(false);
+  const openingRef = useRef(false);
 
   useEffect(() => {
     boot();
@@ -81,6 +83,12 @@ export default function RaceDirectionPage() {
       return;
     }
 
+    if (openingRef.current) return;
+
+    openingRef.current = true;
+    setOpening(true);
+    setMessage("Abriendo circuito...");
+
     const circuit = circuits.find(c => c.id === selectedCircuit);
 
     const { data: userData } = await supabase.auth.getUser();
@@ -95,7 +103,27 @@ export default function RaceDirectionPage() {
     }).select("*,circuit:circuits(*)").single();
 
     if (error) {
-      setMessage(`No se pudo abrir: ${error.message}`);
+      if (error.code === "23505") {
+        const { data: existingEvent } = await supabase
+          .from("circuit_events")
+          .select("*,circuit:circuits(*)")
+          .eq("season_id", season.id)
+          .eq("status", "open")
+          .limit(1)
+          .maybeSingle();
+
+        if (existingEvent) {
+          await loadEvent(existingEvent.id, existingEvent);
+          setMessage("El circuito ya estaba abierto. Continuamos la sesión existente.");
+        } else {
+          setMessage("Ya existe otro circuito abierto para esta temporada.");
+        }
+      } else {
+        setMessage(`No se pudo abrir: ${error.message}`);
+      }
+
+      openingRef.current = false;
+      setOpening(false);
       return;
     }
 
@@ -108,12 +136,16 @@ export default function RaceDirectionPage() {
     );
 
     if (participantError) {
+      openingRef.current = false;
+      setOpening(false);
       setMessage(`Circuito abierto, pero fallaron participantes: ${participantError.message}`);
       return;
     }
 
     setEvent(created);
     setRaces([]);
+    openingRef.current = false;
+    setOpening(false);
     setMessage("Circuito abierto.");
   }
 
@@ -302,8 +334,12 @@ export default function RaceDirectionPage() {
             })}
           </div>
 
-          <button className={styles.openButton} onClick={openCircuit} disabled={!selectedCircuit || selectedDrivers.length < 2}>
-            ABRIR CIRCUITO
+          <button
+            className={styles.openButton}
+            onClick={openCircuit}
+            disabled={opening || !selectedCircuit || selectedDrivers.length < 2}
+          >
+            {opening ? "ABRIENDO..." : "ABRIR CIRCUITO"}
           </button>
         </section>
       ) : (
