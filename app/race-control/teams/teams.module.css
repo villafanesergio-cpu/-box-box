@@ -1,0 +1,433 @@
+.page {
+  min-height: 100vh;
+  padding: 28px;
+  color: #f7f7f7;
+  background:
+    radial-gradient(circle at 100% 0, rgba(225, 6, 0, .18), transparent 31%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, .018) 0 9px, transparent 9px 18px),
+    #09090d;
+}
+
+.header {
+  width: min(1320px, 100%);
+  margin: 0 auto 20px;
+  padding: 28px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 24px;
+  background: linear-gradient(120deg, #15151b, #0f0f13 62%, rgba(225, 6, 0, .18));
+}
+
+.header h1 {
+  margin: 8px 0 4px;
+  font-size: clamp(42px, 6vw, 76px);
+  line-height: .88;
+  letter-spacing: -.055em;
+  text-transform: uppercase;
+}
+
+.header p {
+  margin: 0;
+  color: #b7b7c0;
+}
+
+.kicker {
+  color: #ff6963;
+  font-size: 11px;
+  font-weight: 1000;
+  letter-spacing: .16em;
+}
+
+.headerActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.primaryButton,
+.secondaryButton {
+  padding: 12px 15px;
+  border-radius: 12px;
+  text-decoration: none;
+  font-weight: 900;
+}
+
+.primaryButton {
+  color: white;
+  background: #e10600;
+}
+
+.secondaryButton {
+  color: white;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: #202027;
+}
+
+.grid {
+  width: min(1320px, 100%);
+  margin: auto;
+  display: grid;
+  grid-template-columns: minmax(330px, .8fr) minmax(460px, 1.2fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.formCard,
+.listCard {
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 22px;
+  background: linear-gradient(180deg, #17171d, #111116);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .28);
+}
+
+.formCard {
+  padding: 20px;
+  position: sticky;
+  top: 18px;
+}
+
+.listCard {
+  padding: 20px;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.cardHeader h2 {
+  margin: 5px 0 0;
+  font-size: 25px;
+}
+
+.count {
+  min-width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: white;
+  background: #e10600;
+  font-size: 21px;
+}
+
+.textButton {
+  border: 0;
+  color: #ff7772;
+  background: none;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.label {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+  color: #d5d5db;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: .04em;
+}
+
+.label input:not([type="color"]) {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 11px;
+  outline: none;
+  color: white;
+  background: #0c0c10;
+}
+
+.label input:focus {
+  border-color: rgba(225, 6, 0, .8);
+}
+
+.label small {
+  color: #898993;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.colorGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.colorControl {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 7px;
+}
+
+.colorControl input[type="color"] {
+  width: 48px;
+  height: 43px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 10px;
+  background: #0c0c10;
+}
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-top: 16px;
+  padding: 13px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 12px;
+  background: #0e0e13;
+  cursor: pointer;
+}
+
+.switchRow input {
+  width: 20px;
+  height: 20px;
+  accent-color: #e10600;
+}
+
+.switchRow strong,
+.switchRow small {
+  display: block;
+}
+
+.switchRow small {
+  margin-top: 2px;
+  color: #8f8f99;
+}
+
+.preview {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-top: 17px;
+  min-height: 104px;
+  padding: 16px;
+  border-radius: 16px;
+  color: var(--team-secondary);
+  background:
+    linear-gradient(100deg, color-mix(in srgb, var(--team-primary) 88%, black), #111 72%);
+}
+
+.preview::after {
+  content: "";
+  position: absolute;
+  inset: -80% -30% auto auto;
+  width: 210px;
+  height: 210px;
+  transform: rotate(28deg);
+  border: 18px solid rgba(255, 255, 255, .12);
+}
+
+.previewLogo,
+.teamLogo {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background:
+    linear-gradient(45deg, rgba(255,255,255,.04) 25%, transparent 25% 75%, rgba(255,255,255,.04) 75%),
+    linear-gradient(45deg, rgba(255,255,255,.04) 25%, transparent 25% 75%, rgba(255,255,255,.04) 75%),
+    rgba(0,0,0,.16);
+  background-position: 0 0, 8px 8px;
+  background-size: 16px 16px;
+}
+
+.previewLogo {
+  width: 72px;
+  height: 72px;
+  border-radius: 17px;
+}
+
+.previewLogo img,
+.teamLogo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 4px;
+}
+
+.previewLogo span,
+.teamLogo span {
+  color: #fff;
+  font-weight: 1000;
+}
+
+.preview > div:last-child {
+  position: relative;
+  z-index: 1;
+}
+
+.preview small,
+.preview strong,
+.preview span {
+  display: block;
+}
+
+.preview strong {
+  margin: 2px 0;
+  font-size: 23px;
+}
+
+.preview span {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .13em;
+}
+
+.saveButton {
+  width: 100%;
+  margin-top: 16px;
+  padding: 13px 16px;
+  border: 0;
+  border-radius: 12px;
+  color: white;
+  background: #e10600;
+  font-weight: 1000;
+  cursor: pointer;
+}
+
+.saveButton:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+.message,
+.empty {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 11px;
+  color: #d7d7dd;
+  background: rgba(255, 255, 255, .055);
+}
+
+.teamList {
+  display: grid;
+  gap: 10px;
+}
+
+.teamRow {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 66px 1fr auto;
+  gap: 13px;
+  align-items: center;
+  padding: 13px;
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-left: 5px solid var(--team-primary);
+  border-radius: 15px;
+  background: #111116;
+}
+
+.teamRow::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 24%;
+  height: 100%;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent, color-mix(in srgb, var(--team-primary) 22%, transparent));
+}
+
+.inactive {
+  opacity: .5;
+}
+
+.teamLogo {
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
+}
+
+.teamInfo,
+.rowActions {
+  position: relative;
+  z-index: 1;
+}
+
+.teamInfo strong,
+.teamInfo span {
+  display: block;
+}
+
+.teamInfo strong {
+  font-size: 19px;
+}
+
+.teamInfo span {
+  margin-top: 7px;
+  color: #9999a3;
+  font-size: 11px;
+}
+
+.teamInfo i {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 5px;
+  vertical-align: -3px;
+  border: 1px solid rgba(255, 255, 255, .25);
+  border-radius: 50%;
+}
+
+.rowActions {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  justify-content: end;
+}
+
+.rowActions button {
+  padding: 9px 11px;
+  border: 1px solid rgba(255, 255, 255, .11);
+  border-radius: 10px;
+  color: white;
+  background: #24242b;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.rowActions .dangerButton {
+  color: #ff8f8a;
+  border-color: rgba(225, 6, 0, .35);
+  background: rgba(225, 6, 0, .11);
+}
+
+.rowActions .activateButton {
+  color: #72e2a9;
+  border-color: rgba(37, 209, 126, .3);
+  background: rgba(37, 209, 126, .1);
+}
+
+@media (max-width: 900px) {
+  .page { padding: 14px; }
+  .header { align-items: start; flex-direction: column; }
+  .grid { grid-template-columns: 1fr; }
+  .formCard { position: static; }
+}
+
+@media (max-width: 580px) {
+  .header { padding: 20px; }
+  .headerActions { width: 100%; }
+  .headerActions a { flex: 1; text-align: center; }
+  .colorGrid { grid-template-columns: 1fr; }
+  .teamRow { grid-template-columns: 55px 1fr; }
+  .teamLogo { width: 52px; height: 52px; }
+  .rowActions { grid-column: 1 / -1; justify-content: stretch; }
+  .rowActions button { flex: 1; }
+}

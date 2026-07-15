@@ -1,0 +1,121 @@
+.page {
+  min-height: 100vh;
+  padding: 28px;
+  color: #f7f7f7;
+  background:
+    radial-gradient(circle at 100% 0, rgba(225,6,0,.18), transparent 32%),
+    repeating-linear-gradient(135deg, rgba(255,255,255,.018) 0 9px, transparent 9px 18px),
+    #09090d;
+}
+
+.header {
+  width: min(1240px,100%);
+  margin: 0 auto 18px;
+  padding: 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 20px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 24px;
+  background: linear-gradient(120deg,#17171d,#0f0f13 65%,rgba(225,6,0,.2));
+}
+
+.header span {
+  color: #ff6c66;
+  font-size: 11px;
+  font-weight: 1000;
+  letter-spacing: .16em;
+}
+
+.header h1 {
+  margin: 8px 0 4px;
+  font-size: clamp(48px,7vw,84px);
+  line-height: .85;
+  letter-spacing: -.06em;
+  text-transform: uppercase;
+}
+
+.header p {
+  margin: 0;
+  color: #aaaab3;
+}
+
+.back {
+  padding: 12px 15px;
+  border-radius: 12px;
+  color: white;
+  background: #e10600;
+  text-decoration: none;
+  font-weight: 900;
+}
+
+.grid {
+  width: min(1240px,100%);
+  margin: auto;
+  display: grid;
+  grid-template-columns: repeat(3,1fr);
+  gap: 14px;
+}
+
+.card {
+  min-height: 190px;
+  padding: 22px;
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 15px;
+  align-items: start;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 20px;
+  color: white;
+  background: linear-gradient(180deg,#17171d,#111116);
+  text-decoration: none;
+  transition: transform .18s ease, border-color .18s ease;
+}
+
+a.card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(225,6,0,.7);
+}
+
+.icon {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: rgba(225,6,0,.12);
+  font-size: 28px;
+}
+
+.card h2 {
+  margin: 9px 0 5px;
+  font-size: 27px;
+}
+
+.card p {
+  margin: 0;
+  color: #a9a9b2;
+  line-height: 1.45;
+}
+
+.active,
+.soon {
+  font-size: 10px;
+  font-weight: 1000;
+  letter-spacing: .14em;
+}
+
+.active { color: #72e2a9; }
+.soon { color: #8d8d96; }
+.disabled { opacity: .45; }
+
+@media(max-width:900px) {
+  .grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media(max-width:600px) {
+  .page { padding: 14px; }
+  .header { align-items: start; flex-direction: column; }
+  .grid { grid-template-columns: 1fr; }
+}
