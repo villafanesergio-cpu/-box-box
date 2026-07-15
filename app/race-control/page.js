@@ -1,7 +1,22 @@
 import Link from "next/link";
 import styles from "./race-control.module.css";
+import LogoutButton from "./logout-button";
 
 const modules = [
+  {
+    href: "/race-control/race",
+    icon: "🎛️",
+    title: "Dirección de Carrera",
+    description: "Abrir circuitos, seleccionar pilotos y cargar resultados.",
+    status: "ACTIVO",
+  },
+  {
+    href: "/race-control/circuits",
+    icon: "🏁",
+    title: "Circuitos",
+    description: "Nombre, país, bandera, trazado e imágenes.",
+    status: "ACTIVO",
+  },
   {
     href: "/race-control/drivers",
     icon: "👤",
@@ -25,23 +40,9 @@ const modules = [
   },
   {
     href: "#",
-    icon: "🗺️",
-    title: "Circuitos",
-    description: "Calendario, bandera e imagen propia.",
-    status: "PRÓXIMAMENTE",
-  },
-  {
-    href: "#",
     icon: "📋",
     title: "Resultados",
-    description: "Carga, corrección, DNF y penalizaciones.",
-    status: "PRÓXIMAMENTE",
-  },
-  {
-    href: "#",
-    icon: "⚙️",
-    title: "Configuración",
-    description: "Puntos, permisos y preferencias.",
+    description: "Historial completo, correcciones y auditoría.",
     status: "PRÓXIMAMENTE",
   },
 ];
@@ -51,11 +52,14 @@ export default function RaceControlPage() {
     <main className={styles.page}>
       <header className={styles.header}>
         <div>
-          <span>BOX BOX · ADMINISTRACIÓN</span>
+          <span>BOX BOX · ADMINISTRACIÓN PRIVADA</span>
           <h1>Race Control</h1>
-          <p>Configuración online del campeonato.</p>
+          <p>Centro de operaciones del campeonato.</p>
         </div>
-        <Link href="/" className={styles.back}>Volver a BOX BOX</Link>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link href="/" className={styles.back}>Volver a BOX BOX</Link>
+          <LogoutButton />
+        </div>
       </header>
 
       <section className={styles.grid}>
@@ -74,13 +78,9 @@ export default function RaceControlPage() {
           );
 
           return module.href === "#" ? (
-            <article className={`${styles.card} ${styles.disabled}`} key={module.title}>
-              {content}
-            </article>
+            <article className={`${styles.card} ${styles.disabled}`} key={module.title}>{content}</article>
           ) : (
-            <Link className={styles.card} href={module.href} key={module.title}>
-              {content}
-            </Link>
+            <Link className={styles.card} href={module.href} key={module.title}>{content}</Link>
           );
         })}
       </section>

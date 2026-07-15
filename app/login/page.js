@@ -69,6 +69,12 @@ const styles = {
   },
 };
 
+function getNextPath() {
+  if (typeof window === "undefined") return "/race-control";
+  const next = new URLSearchParams(window.location.search).get("next");
+  return next?.startsWith("/") ? next : "/race-control";
+}
+
 export default function LoginPage() {
   const supabase = useMemo(() => createClient(), []);
   const [email, setEmail] = useState("");
@@ -96,7 +102,7 @@ export default function LoginPage() {
       }
 
       setSeason(data ? `${data.name} (${data.year})` : "Sin temporada activa");
-      setMessage("Supabase conectado correctamente.");
+      setMessage(authData?.user ? "Sesión de administrador activa." : "Ingresá para acceder a Race Control.");
     }
 
     checkConnection();
@@ -107,7 +113,7 @@ export default function LoginPage() {
     setLoading(true);
     setMessage("Ingresando...");
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -119,9 +125,7 @@ export default function LoginPage() {
       return;
     }
 
-    setUserEmail(data.user?.email ?? email);
-    setPassword("");
-    setMessage("Sesión de administrador iniciada.");
+    window.location.href = getNextPath();
   }
 
   async function signOut() {
@@ -140,7 +144,7 @@ export default function LoginPage() {
           Administrador
         </h1>
         <p style={{ margin: 0, color: "#aaa" }}>
-          Prueba de conexión y acceso con Supabase.
+          Acceso privado al panel de dirección de carrera.
         </p>
 
         {userEmail ? (
@@ -150,11 +154,11 @@ export default function LoginPage() {
               {userEmail}<br />
               Temporada: {season || "cargando..."}
             </div>
+            <button type="button" style={styles.button} onClick={() => { window.location.href = getNextPath(); }}>
+              ENTRAR A RACE CONTROL
+            </button>
             <button type="button" style={styles.secondary} onClick={signOut}>
               Cerrar sesión
-            </button>
-            <button type="button" style={styles.button} onClick={() => { window.location.href = "/"; }}>
-              Volver a BOX BOX
             </button>
           </>
         ) : (

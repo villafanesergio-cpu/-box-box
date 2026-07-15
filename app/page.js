@@ -889,7 +889,7 @@ export default function Home() {
           ["pilotos", "👤", "Pilotos"],
           ["admin", "⚙️", "Race Control"]
         ].map(([id, icon, label]) => (
-          <button type="button" key={id} onClick={() => setSection(id)} className={section === id ? "activo" : ""}>
+          <button type="button" key={id} onClick={() => id === "admin" ? (window.location.href = "/race-control") : setSection(id)} className={section === id ? "activo" : ""}>
             <span>{icon}</span><small>{label}</small>
           </button>
         ))}
