@@ -39,11 +39,11 @@ const modules = [
     status: "PRÓXIMAMENTE",
   },
   {
-    href: "#",
-    icon: "📋",
-    title: "Resultados",
-    description: "Historial completo, correcciones y auditoría.",
-    status: "PRÓXIMAMENTE",
+    href: "/standings",
+    icon: "📊",
+    title: "Clasificación",
+    description: "Puntos, victorias y DNF con base histórica más resultados nuevos.",
+    status: "ACTIVO",
   },
 ];
 
