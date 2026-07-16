@@ -32,11 +32,18 @@ const modules = [
     status: "ACTIVO",
   },
   {
-    href: "#",
+    href: "/race-control/appearance",
+    icon: "🎨",
+    title: "Apariencia y sponsors",
+    description: "Fondos rotativos de la portada y barra pública de sponsors.",
+    status: "ACTIVO",
+  },
+  {
+    href: "/race-control/seasons",
     icon: "🏆",
     title: "Temporadas",
-    description: "Crear temporadas y conservar el historial.",
-    status: "PRÓXIMAMENTE",
+    description: "Crear temporadas, activarlas y conservar el historial.",
+    status: "ACTIVO",
   },
   {
     href: "/standings",

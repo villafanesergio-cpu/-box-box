@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { circuitos2026, ganadores, noticias, pilotos } from "../lib/boxbox-data";
+import { circuitos2026, ganadores, pilotos } from "../lib/boxbox-data";
+import { createClient } from "../lib/supabase/client";
 import {
   LIVE_CHANNEL,
   STORAGE_KEY,
@@ -16,10 +17,211 @@ import {
 
 const initialRaceState = { sessions: [], activeSessionId: null };
 
+const publicDriverNames = {
+  Martin: "Martín",
+  Alvaro: "Álvaro",
+  Gonzalo: "Gonzalo Herrera",
+  Lorenzo: "Loren",
+  EZE: "Eze",
+  DODI: "Dodi",
+};
+
+const latestGpNews = [
+  {
+    circuit: "Suzuka",
+    winner: "Sergio",
+    title: "Sergio conquistó la Fecha 5",
+    text: "Ganó Suzuka y cerró la jornada con 45 puntos. Martín sumó 40 y Rodri 36.",
+  },
+  {
+    circuit: "Austria",
+    winner: "Martín",
+    title: "Martín completó el doblete de la noche",
+    text: "Después de imponerse en México, también ganó Austria y alcanzó cuatro GP ganados.",
+  },
+  {
+    circuit: "México",
+    winner: "Martín",
+    title: "Martín pegó primero en la cuarta fecha",
+    text: "Se quedó con el GP de México en la jornada compartida con Monza y Austria.",
+  },
+  {
+    circuit: "Monza",
+    winner: "Sergio",
+    title: "Sergio fue el más rápido en Monza",
+    text: "La victoria italiana fue su tercera antes de volver a ganar en Suzuka.",
+  },
+  {
+    circuit: "Hungría",
+    winner: "Rodri",
+    title: "La gran noche de Rodri",
+    text: "Ganó Hungría con 21 puntos; Nico terminó con 19 y Martín con 16.",
+  },
+];
+
+function comparePublicCircuitRows(a, b) {
+  if (b.points !== a.points) return b.points - a.points;
+  if (b.wins !== a.wins) return b.wins - a.wins;
+
+  const maxPosition = Math.max(a.positions.length, b.positions.length);
+  for (let index = 0; index < maxPosition; index += 1) {
+    const aPosition = a.positions[index] ?? 999;
+    const bPosition = b.positions[index] ?? 999;
+    if (aPosition !== bPosition) return aPosition - bPosition;
+  }
+
+  if (a.dnf !== b.dnf) return a.dnf - b.dnf;
+  return a.driverId.localeCompare(b.driverId);
+}
+
+function calculatePublicCircuitWinner(event) {
+  const rows = new Map();
+
+  for (const race of event.races ?? []) {
+    for (const result of race.race_results ?? []) {
+      const current = rows.get(result.driver_id) ?? {
+        driverId: result.driver_id,
+        points: 0,
+        wins: 0,
+        dnf: 0,
+        positions: [],
+      };
+
+      current.points += Number(result.final_points ?? 0);
+
+      if (result.status === "dnf") {
+        current.dnf += 1;
+      } else {
+        const position = Number(result.finish_position ?? 999);
+        current.positions.push(position);
+        if (position === 1) current.wins += 1;
+      }
+
+      rows.set(result.driver_id, current);
+    }
+  }
+
+  return [...rows.values()].sort(comparePublicCircuitRows)[0]?.driverId ?? null;
+}
+
+async function fetchPublicStandings(supabase) {
+  const { data: activeSeason, error: seasonError } = await supabase
+    .from("seasons")
+    .select("id")
+    .eq("active", true)
+    .limit(1)
+    .maybeSingle();
+
+  if (seasonError) throw seasonError;
+  if (!activeSeason) throw new Error("No hay una temporada activa.");
+
+  const [assignmentsResult, baselinesResult, eventsResult] = await Promise.all([
+    supabase
+      .from("season_driver_teams")
+      .select(`
+        id,racing_number,active,
+        driver:drivers(id,name,photo_background_url,photo_transparent_url,celebration_media_url,active),
+        team:teams(id,name,logo_url,primary_color,secondary_color,active)
+      `)
+      .eq("season_id", activeSeason.id)
+      .eq("active", true)
+      .order("racing_number", { ascending: true }),
+    supabase
+      .from("season_driver_baselines")
+      .select("driver_id,base_points,base_circuit_wins,base_dnf")
+      .eq("season_id", activeSeason.id),
+    supabase
+      .from("circuit_events")
+      .select(`
+        id,status,finalized_at,
+        races(
+          id,race_number,
+          race_results(driver_id,status,final_points,finish_position)
+        )
+      `)
+      .eq("season_id", activeSeason.id)
+      .eq("status", "finalized"),
+  ]);
+
+  const error = assignmentsResult.error || baselinesResult.error || eventsResult.error;
+  if (error) throw error;
+
+  const assignments = (assignmentsResult.data ?? []).filter(
+    (assignment) => assignment.driver?.active && assignment.team?.active
+  );
+  const baselines = new Map(
+    (baselinesResult.data ?? []).map((row) => [row.driver_id, row])
+  );
+  const scoredEvents = (eventsResult.data ?? []).filter((event) =>
+    (event.races ?? []).some((race) => (race.race_results ?? []).length > 0)
+  );
+
+  const calculated = new Map();
+
+  for (const assignment of assignments) {
+    const baseline = baselines.get(assignment.driver.id);
+    calculated.set(assignment.driver.id, {
+      driverId: assignment.driver.id,
+      nombre: publicDriverNames[assignment.driver.name] || assignment.driver.name,
+      numero: assignment.racing_number,
+      foto: assignment.driver.photo_transparent_url,
+      photoBackgroundUrl: assignment.driver.photo_background_url,
+      celebrationMediaUrl: assignment.driver.celebration_media_url,
+      escuderia: assignment.team.name,
+      teamLogo: assignment.team.logo_url,
+      puntosBase: Number(baseline?.base_points ?? 0),
+      puntosApp: 0,
+      victoriasBase: Number(baseline?.base_circuit_wins ?? 0),
+      victoriasApp: 0,
+      dnfBase: Number(baseline?.base_dnf ?? 0),
+      dnfApp: 0,
+    });
+  }
+
+  for (const event of scoredEvents) {
+    const circuitWinnerId = calculatePublicCircuitWinner(event);
+    if (circuitWinnerId && calculated.has(circuitWinnerId)) {
+      calculated.get(circuitWinnerId).victoriasApp += 1;
+    }
+
+    for (const race of event.races ?? []) {
+      for (const result of race.race_results ?? []) {
+        const row = calculated.get(result.driver_id);
+        if (!row) continue;
+        row.puntosApp += Number(result.final_points ?? 0);
+        if (result.status === "dnf") row.dnfApp += 1;
+      }
+    }
+  }
+
+  const standings = [...calculated.values()]
+    .map((row) => {
+      const puntos = row.puntosBase + row.puntosApp;
+      const victorias = row.victoriasBase + row.victoriasApp;
+      const dnfTotal = row.dnfBase + row.dnfApp;
+      return {
+        ...row,
+        puntos,
+        victorias,
+        dnf: dnfTotal,
+        dnfTotal,
+        iniciales: row.nombre.slice(0, 2).toUpperCase(),
+      };
+    })
+    .sort((a, b) => {
+      if (b.puntos !== a.puntos) return b.puntos - a.puntos;
+      if (b.victorias !== a.victorias) return b.victorias - a.victorias;
+      if (a.dnfTotal !== b.dnfTotal) return a.dnfTotal - b.dnfTotal;
+      return a.nombre.localeCompare(b.nombre, "es");
+    });
+
+  return { standings, circuitCount: scoredEvents.length };
+}
+
 function DriverAvatar({ pilot, className = "" }) {
   const initials = pilot?.iniciales || pilot?.nombre?.slice(0, 2).toUpperCase() || "—";
   return (
-    <span className={`driver-avatar ${className}`.trim()} aria-label={pilot?.nombre || "Piloto"}>
+    <span className={`driver-avatar ${pilot?.foto ? "has-photo" : "no-photo"} ${className}`.trim()} aria-label={pilot?.nombre || "Piloto"}>
       <span>{initials}</span>
       {pilot?.foto && (
         <img
@@ -32,6 +234,64 @@ function DriverAvatar({ pilot, className = "" }) {
   );
 }
 
+function DriverCelebration({ pilot }) {
+  const mediaUrl =
+    pilot?.celebrationMediaUrl ||
+    pilot?.photoBackgroundUrl ||
+    pilot?.foto ||
+    "";
+
+  if (!mediaUrl) {
+    return <DriverAvatar pilot={pilot} className="profile-photo" />;
+  }
+
+  const isVideo = /\.(mp4|webm)(\?|$)/i.test(mediaUrl);
+
+  return (
+    <div className="driver-celebration" aria-label={`Animación de ${pilot?.nombre || "piloto"}`}>
+      {isVideo ? (
+        <video src={mediaUrl} muted autoPlay loop playsInline />
+      ) : (
+        <img src={mediaUrl} alt={pilot?.nombre || "Piloto"} />
+      )}
+    </div>
+  );
+}
+
+function SponsorBar({ sponsors }) {
+  if (!sponsors.length) return null;
+  const repeated = [...sponsors, ...sponsors, ...sponsors];
+
+  return (
+    <section className="sponsor-bar" aria-label="Sponsors BOX BOX">
+      <div className="sponsor-window">
+        <div className="sponsor-track">
+          {repeated.map((sponsor, index) => {
+            const content = (
+              <>
+                {sponsor.logo_url && <img src={sponsor.logo_url} alt={sponsor.name} />}
+              </>
+            );
+
+            return sponsor.website_url ? (
+              <a
+                href={sponsor.website_url}
+                target="_blank"
+                rel="noreferrer"
+                key={`${sponsor.id}-${index}`}
+              >
+                {content}
+              </a>
+            ) : (
+              <span key={`${sponsor.id}-${index}`}>{content}</span>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 const renumberRaces = (races) => races.map((race, index) => ({ ...race, number: index + 1 }));
 
 function Tabla({ lista = pilotos, limite }) {
@@ -39,8 +299,11 @@ function Tabla({ lista = pilotos, limite }) {
   return (
     <div className="tabla">
       {rows.map((p, i) => (
-        <div className={`fila standings-row ${i < 3 ? `standings-top top-${i + 1}` : ""}`} key={p.nombre}>
+        <div className={`fila standings-row ${i < 3 ? `standings-top top-${i + 1}` : ""}`} key={p.driverId || p.nombre}>
           <div className={`pos pos-${i + 1}`}>{i + 1}</div>
+          <span className="standing-team-logo">
+            {p.teamLogo && <img src={p.teamLogo} alt={p.escuderia || "Escudería"} />}
+          </span>
           <DriverAvatar pilot={p} className={i < 3 ? "standings-photo" : ""} />
           <div className="piloto-info">
             <strong>{p.nombre}</strong>
@@ -332,7 +595,14 @@ function CircuitSummary({ session, standings }) {
 }
 
 export default function Home() {
+  const supabase = useMemo(() => createClient(), []);
   const [section, setSection] = useState("inicio");
+  const [publicStandings, setPublicStandings] = useState([]);
+  const [publicCircuitCount, setPublicCircuitCount] = useState(0);
+  const [publicStandingsLoaded, setPublicStandingsLoaded] = useState(false);
+  const [heroImages, setHeroImages] = useState([]);
+  const [heroIndex, setHeroIndex] = useState(0);
+  const [sponsors, setSponsors] = useState([]);
   const [raceState, setRaceState] = useState(initialRaceState);
   const [hydrated, setHydrated] = useState(false);
   const [selectedCircuit, setSelectedCircuit] = useState("japon");
@@ -340,6 +610,70 @@ export default function Home() {
   const [entries, setEntries] = useState([]);
   const [editingRaceId, setEditingRaceId] = useState(null);
   const [changingCircuit, setChangingCircuit] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAppearance() {
+      const [heroResult, sponsorResult] = await Promise.all([
+        supabase
+          .from("site_hero_images")
+          .select("id,title,image_url,sort_order")
+          .eq("active", true)
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("sponsors")
+          .select("id,name,logo_url,website_url,sort_order")
+          .eq("active", true)
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: true }),
+      ]);
+
+      if (cancelled) return;
+
+      if (!heroResult.error) {
+        setHeroImages(heroResult.data ?? []);
+        setHeroIndex(0);
+      } else {
+        console.error("No se pudieron cargar los fondos", heroResult.error);
+      }
+
+      if (!sponsorResult.error) {
+        setSponsors(sponsorResult.data ?? []);
+      } else {
+        console.error("No se pudieron cargar los sponsors", sponsorResult.error);
+      }
+    }
+
+    loadAppearance();
+    return () => { cancelled = true; };
+  }, [supabase]);
+
+  useEffect(() => {
+    if (heroImages.length < 2) return undefined;
+    const timer = window.setInterval(() => {
+      setHeroIndex((current) => (current + 1) % heroImages.length);
+    }, 9000);
+    return () => window.clearInterval(timer);
+  }, [heroImages.length]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchPublicStandings(supabase)
+      .then(({ standings, circuitCount }) => {
+        if (cancelled) return;
+        setPublicStandings(standings);
+        setPublicCircuitCount(circuitCount);
+        setPublicStandingsLoaded(true);
+      })
+      .catch((error) => {
+        console.error("No se pudo sincronizar la portada con Supabase", error);
+      });
+
+    return () => { cancelled = true; };
+  }, [supabase]);
 
   useEffect(() => {
     try {
@@ -373,9 +707,21 @@ export default function Home() {
     [activeSession]
   );
   const worldStandings = useMemo(
-    () => calculateWorldStandings(pilotos, raceState.sessions),
-    [raceState.sessions]
+    () => publicStandingsLoaded
+      ? publicStandings
+      : calculateWorldStandings(pilotos.filter((pilot) => pilot.nombre !== "Paola"), raceState.sessions),
+    [publicStandings, publicStandingsLoaded, raceState.sessions]
   );
+  const dnfStandings = useMemo(
+    () => [...worldStandings].sort((a, b) => {
+      const difference = (b.dnfTotal ?? b.dnf) - (a.dnfTotal ?? a.dnf);
+      if (difference !== 0) return difference;
+      return a.nombre.localeCompare(b.nombre, "es");
+    }),
+    [worldStandings]
+  );
+  const highestDnf = dnfStandings[0] || null;
+  const activeHero = heroImages.length ? heroImages[heroIndex % heroImages.length] : null;
   const lastRace = activeSession?.races?.at(-1) || null;
   const nextGrid = useMemo(
     () => lastRace ? nextGridFromRace(lastRace, selectedDrivers) : [],
@@ -602,6 +948,7 @@ export default function Home() {
 
   return (
     <main className="app">
+      <SponsorBar sponsors={sponsors} />
       <header className="header">
         <div className="marca">
           <img src="/box-box-logo.png" alt="BOX BOX" />
@@ -611,14 +958,20 @@ export default function Home() {
       </header>
 
       <section className={`vista ${section === "inicio" ? "activa" : ""}`}>
-        <div className="hero">
+        <div
+          className="hero"
+          style={activeHero ? {
+            backgroundImage: `linear-gradient(95deg,rgba(0,0,0,.96),rgba(0,0,0,.5)),url("${activeHero.image_url}")`,
+          } : undefined}
+        >
           <div>
             <span className="eyebrow">SIMRACING ENTRE AMIGOS</span>
             <h1>BOX BOX<br />MUNDIAL 2026</h1>
             <p>Noticias, estadísticas, pilotos y resultados de toda la competición.</p>
             <div className="acciones">
-              <button type="button" onClick={() => setSection("estadisticas")} className="btn rojo">Ver campeonato</button>
-              <button type="button" onClick={() => setSection("carrera")} className="btn oscuro">Abrir Modo Carrera</button>
+              <button type="button" onClick={() => { window.location.href = "/standings"; }} className="btn rojo">Ver campeonato</button>
+              <button type="button" onClick={() => { window.location.href = "/tv"; }} className="btn tv-public">Abrir Modo TV</button>
+              <button type="button" onClick={() => { window.location.href = "/race-control"; }} className="btn oscuro">Race Control</button>
             </div>
           </div>
         </div>
@@ -626,20 +979,44 @@ export default function Home() {
         <div className="resumen-grid">
           <article className="card"><span>Líder</span><strong>{worldStandings[0]?.nombre}</strong><small>{worldStandings[0]?.puntos} puntos</small></article>
           <article className="card"><span>Diferencia</span><strong>{(worldStandings[0]?.puntos || 0) - (worldStandings[1]?.puntos || 0)} pts</strong><small>{worldStandings[1]?.nombre} persigue</small></article>
-          <article className="card"><span>Circuitos cargados</span><strong>{raceState.sessions.length}</strong><small>Desde Race Control</small></article>
-          <article className="card"><span>Más DNF</span><strong>Rodri</strong><small>14 abandonos base</small></article>
+          <article className="card latest-gp-card"><span>Último GP</span><strong>SUZUKA</strong><small>Sergio ganó la Fecha 5</small></article>
+          <article className="card"><span>Más DNF</span><strong>{highestDnf?.nombre || "—"}</strong><small>{highestDnf?.dnfTotal ?? highestDnf?.dnf ?? 0} abandonos</small></article>
         </div>
 
         <div className="dos-columnas">
           <section className="panel">
-            <div className="panel-head"><h2>Campeonato</h2><button type="button" onClick={() => setSection("estadisticas")}>Ver todo</button></div>
+            <div className="panel-head"><h2>Campeonato</h2><button type="button" onClick={() => { window.location.href = "/standings"; }}>Ver todo</button></div>
             <Tabla lista={worldStandings} limite={6} />
           </section>
-          <section className="panel noticias">
-            <div className="panel-head"><h2>Noticias BOX BOX</h2></div>
-            {noticias.map((item) => <article key={item.titulo}><strong>{item.titulo}</strong><p>{item.texto}</p></article>)}
+          <section className="panel noticias latest-news">
+            <div className="panel-head"><h2>Últimos 5 GP</h2><span>Historia reciente</span></div>
+            {latestGpNews.map((item) => (
+              <article key={item.circuit}>
+                <small>{item.circuit} · GANÓ {item.winner}</small>
+                <strong>{item.title}</strong>
+                <p>{item.text}</p>
+              </article>
+            ))}
           </section>
         </div>
+
+        <section className="panel dnf-ranking-panel">
+          <div className="panel-head">
+            <h2>Ranking DNF</h2>
+            <span>Abandonos acumulados</span>
+          </div>
+          <div className="dnf-ranking-grid">
+            {dnfStandings.map((pilot, index) => (
+              <article className={`dnf-ranking-row ${index === 0 ? "dnf-leader" : ""}`} key={pilot.driverId || pilot.nombre}>
+                <b>{index + 1}</b>
+                <span className="dnf-team-logo">{pilot.teamLogo && <img src={pilot.teamLogo} alt="" />}</span>
+                <DriverAvatar pilot={pilot} />
+                <div><strong>{pilot.nombre}</strong><small>{pilot.escuderia}</small></div>
+                <em>{pilot.dnfTotal ?? pilot.dnf}<small>DNF</small></em>
+              </article>
+            ))}
+          </div>
+        </section>
       </section>
 
       <section className={`vista ${section === "estadisticas" ? "activa" : ""}`}>
@@ -856,7 +1233,7 @@ export default function Home() {
           {worldStandings.map((pilot) => (
             <article className="piloto-card" key={pilot.nombre}>
               <div className="foto-placeholder">
-                <DriverAvatar pilot={pilot} className="profile-photo" />
+                <DriverCelebration pilot={pilot} />
               </div>
               <div className="numero">#{pilot.numero}</div>
               <h3>{pilot.nombre}</h3><p>{pilot.escuderia}</p>
@@ -885,11 +1262,11 @@ export default function Home() {
         {[
           ["inicio", "🏠", "Inicio"],
           ["estadisticas", "📊", "Estadísticas"],
-          ["carrera", "🏁", "Modo Carrera"],
           ["pilotos", "👤", "Pilotos"],
+          ["tv", "📺", "Modo TV"],
           ["admin", "⚙️", "Race Control"]
         ].map(([id, icon, label]) => (
-          <button type="button" key={id} onClick={() => id === "admin" ? (window.location.href = "/race-control") : setSection(id)} className={section === id ? "activo" : ""}>
+          <button type="button" key={id} onClick={() => id === "tv" ? (window.location.href = "/tv") : id === "admin" ? (window.location.href = "/race-control") : setSection(id)} className={section === id ? "activo" : ""}>
             <span>{icon}</span><small>{label}</small>
           </button>
         ))}

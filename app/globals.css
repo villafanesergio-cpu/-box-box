@@ -136,3 +136,64 @@ button:disabled{opacity:.42;cursor:not-allowed!important}
   .summary-metrics{grid-template-columns:repeat(2,1fr)}
   .summary-actions{display:grid;grid-template-columns:1fr}
 }
+
+
+/* BOX BOX PORTADA NOTICIAS + TV V2 */
+.btn.tv-public{background:#f3f0eb;color:#09090c;border:1px solid rgba(255,255,255,.4)}
+.latest-gp-card{background:linear-gradient(135deg,rgba(237,28,36,.26),#111116)}
+.latest-news article small{display:block;color:#ff7771;font-size:9px;font-weight:950;letter-spacing:.09em;margin-bottom:5px}
+.latest-news article strong{display:block}
+.standing-team-logo,.dnf-team-logo{display:grid;place-items:center;width:40px;height:40px;flex:0 0 auto}
+.standing-team-logo img,.dnf-team-logo img{max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 5px 8px rgba(0,0,0,.35))}
+.driver-avatar.has-photo{width:52px;height:56px;border:0;border-radius:0;background:transparent;overflow:visible}
+.driver-avatar.has-photo>span{display:none}
+.driver-avatar.has-photo>img{object-fit:contain;object-position:center bottom}
+.fila{grid-template-columns:34px 40px 54px minmax(0,1fr) auto}
+.standings-row.standings-top{grid-template-columns:42px 44px 64px minmax(0,1fr) auto}
+.standings-row.standings-top .standings-photo{width:62px;height:66px;border:0}
+.standings-row.top-1 .standings-photo{width:68px;height:72px}
+.dnf-ranking-panel{margin-top:14px}
+.dnf-ranking-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.dnf-ranking-row{display:grid;grid-template-columns:28px 38px 48px minmax(0,1fr) auto;align-items:center;gap:9px;min-height:62px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:#111116}
+.dnf-ranking-row.dnf-leader{background:linear-gradient(90deg,rgba(237,28,36,.24),#111116);box-shadow:inset 4px 0 0 var(--red)}
+.dnf-ranking-row>b{color:#ff7771;text-align:center}
+.dnf-ranking-row .driver-avatar.has-photo{width:46px;height:50px}
+.dnf-ranking-row>div strong,.dnf-ranking-row>div small{display:block}
+.dnf-ranking-row>div small{color:var(--muted);font-size:10px;margin-top:2px}
+.dnf-ranking-row>em{font-family:"Arial Narrow",Impact,sans-serif;font-style:normal;font-size:25px;text-align:right}
+.dnf-ranking-row>em small{display:block;font-family:Inter,ui-sans-serif,sans-serif;font-size:8px;color:var(--muted)}
+@media(max-width:900px){.dnf-ranking-grid{grid-template-columns:1fr}}
+@media(max-width:680px){
+  .fila{grid-template-columns:27px 31px 46px minmax(0,1fr) auto;gap:6px}
+  .standings-row.standings-top{grid-template-columns:29px 34px 52px minmax(0,1fr) auto;gap:6px}
+  .standing-team-logo{width:31px;height:31px}
+  .standings-row.standings-top .standings-photo,.standings-row.top-1 .standings-photo{width:50px;height:56px}
+  .driver-avatar.has-photo{width:44px;height:48px}
+  .dnf-ranking-row{grid-template-columns:24px 34px 44px minmax(0,1fr) auto;padding-inline:7px}
+  .dnf-team-logo{width:34px;height:34px}
+  .acciones .btn{flex:1 1 145px}
+}
+
+
+/* BOX BOX PILOTOS + APARIENCIA + SPONSORS V1 */
+.sponsor-bar{height:54px;display:block;margin:0 -18px;padding:0 18px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,#0e0e13,#19191f,#0e0e13);overflow:hidden}
+.sponsor-label{font-size:9px;font-weight:1000;letter-spacing:.18em;color:#ff7771}
+.sponsor-window{width:100%;min-width:0;overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent)}
+.sponsor-track{display:flex;align-items:center;width:max-content;gap:42px;animation:sponsor-scroll 30s linear infinite}
+.sponsor-track>a,.sponsor-track>span{height:42px;display:flex;align-items:center;color:#f7f4ef;text-decoration:none;white-space:nowrap}
+.sponsor-track img{width:74px;height:34px;object-fit:contain;filter:grayscale(1) brightness(1.7);opacity:.9}
+.sponsor-track strong{display:none}
+.sponsor-bar:hover .sponsor-track{animation-play-state:paused}
+.hero{background-size:cover;background-position:center;transition:background-image .8s ease}
+.driver-celebration{width:100%;height:100%;display:grid;place-items:center;overflow:hidden;background:linear-gradient(145deg,rgba(237,28,36,.16),rgba(255,255,255,.025))}
+.driver-celebration img,.driver-celebration video{width:100%;height:100%;object-fit:contain;object-position:center bottom}
+.foto-placeholder{height:230px;background:linear-gradient(135deg,#202027,#101014)}
+.piloto-card .driver-celebration{border-radius:14px}
+@keyframes sponsor-scroll{from{transform:translateX(0)}to{transform:translateX(-33.333%)}}
+@media(max-width:680px){
+  .sponsor-bar{height:48px;margin:0 -10px;padding:0 10px}
+  .sponsor-track{gap:28px;animation-duration:24s}
+  .sponsor-track img{width:58px;height:28px}
+  .sponsor-track strong{font-size:9px}
+  .foto-placeholder{height:260px}
+}
