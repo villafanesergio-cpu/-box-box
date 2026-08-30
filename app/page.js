@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { circuitos2026, pilotos } from "../lib/boxbox-data";
+import { circuitos2026, ganadores, pilotos } from "../lib/boxbox-data";
 import { createClient } from "../lib/supabase/client";
 import {
   LIVE_CHANNEL,
@@ -25,6 +25,10 @@ const publicDriverNames = {
   EZE: "Eze",
   DODI: "Dodi",
 };
+
+const historicalCircuitWins = new Map(
+  ganadores.map((winner) => [winner.piloto, winner.gps])
+);
 
 function comparePublicCircuitRows(a, b) {
   if (b.points !== a.points) return b.points - a.points;
@@ -133,9 +137,10 @@ async function fetchPublicStandings(supabase) {
 
   for (const assignment of assignments) {
     const baseline = baselines.get(assignment.driver.id);
+    const driverName = publicDriverNames[assignment.driver.name] || assignment.driver.name;
     calculated.set(assignment.driver.id, {
       driverId: assignment.driver.id,
-      nombre: publicDriverNames[assignment.driver.name] || assignment.driver.name,
+      nombre: driverName,
       numero: assignment.racing_number,
       foto: assignment.driver.photo_transparent_url,
       photoBackgroundUrl: assignment.driver.photo_background_url,
@@ -146,6 +151,7 @@ async function fetchPublicStandings(supabase) {
       puntosApp: 0,
       victoriasBase: Number(baseline?.base_circuit_wins ?? 0),
       victoriasApp: 0,
+      circuitosGanadosBase: historicalCircuitWins.get(driverName) ?? [],
       circuitosGanadosApp: [],
       dnfBase: Number(baseline?.base_dnf ?? 0),
       dnfApp: 0,
@@ -1085,10 +1091,10 @@ export default function Home() {
                   <strong>{winner.nombre}</strong>
                   <span>{winner.victorias} victorias</span>
                   <small>
-                    {winner.victoriasBase ?? winner.victorias} del baseline histórico
-                    {Number(winner.victoriasApp ?? 0) > 0
-                      ? ` · ${winner.victoriasApp} desde el registro digital: ${winner.circuitosGanadosApp.join(" · ")}`
-                      : " · Sin victorias desde el registro digital"}
+                    {[
+                      ...(winner.circuitosGanadosBase ?? []),
+                      ...(winner.circuitosGanadosApp ?? []),
+                    ].join(" · ")}
                   </small>
                 </div>
               ))}
