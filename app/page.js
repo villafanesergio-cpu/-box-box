@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { circuitos2026, ganadores, pilotos } from "../lib/boxbox-data";
+import { circuitos2026, pilotos } from "../lib/boxbox-data";
 import { createClient } from "../lib/supabase/client";
 import {
   LIVE_CHANNEL,
@@ -77,7 +77,11 @@ function comparePublicCircuitRows(a, b) {
 function calculatePublicCircuitWinner(event) {
   const rows = new Map();
 
-  for (const race of event.races ?? []) {
+  const races = [...(event.races ?? [])].sort(
+    (a, b) => Number(a.race_number ?? 0) - Number(b.race_number ?? 0)
+  );
+
+  for (const race of races) {
     for (const result of race.race_results ?? []) {
       const current = rows.get(result.driver_id) ?? {
         driverId: result.driver_id,
@@ -134,6 +138,7 @@ async function fetchPublicStandings(supabase) {
       .from("circuit_events")
       .select(`
         id,status,finalized_at,
+        circuit:circuits(name),
         races(
           id,race_number,
           race_results(driver_id,status,final_points,finish_position)
@@ -173,15 +178,19 @@ async function fetchPublicStandings(supabase) {
       puntosApp: 0,
       victoriasBase: Number(baseline?.base_circuit_wins ?? 0),
       victoriasApp: 0,
+      circuitosGanadosApp: [],
       dnfBase: Number(baseline?.base_dnf ?? 0),
       dnfApp: 0,
+      largadasApp: 0,
     });
   }
 
   for (const event of scoredEvents) {
     const circuitWinnerId = calculatePublicCircuitWinner(event);
     if (circuitWinnerId && calculated.has(circuitWinnerId)) {
-      calculated.get(circuitWinnerId).victoriasApp += 1;
+      const circuitWinner = calculated.get(circuitWinnerId);
+      circuitWinner.victoriasApp += 1;
+      circuitWinner.circuitosGanadosApp.push(event.circuit?.name || "Circuito registrado");
     }
 
     for (const race of event.races ?? []) {
@@ -189,6 +198,7 @@ async function fetchPublicStandings(supabase) {
         const row = calculated.get(result.driver_id);
         if (!row) continue;
         row.puntosApp += Number(result.final_points ?? 0);
+        row.largadasApp += 1;
         if (result.status === "dnf") row.dnfApp += 1;
       }
     }
@@ -199,12 +209,16 @@ async function fetchPublicStandings(supabase) {
       const puntos = row.puntosBase + row.puntosApp;
       const victorias = row.victoriasBase + row.victoriasApp;
       const dnfTotal = row.dnfBase + row.dnfApp;
+      const porcentajeDnfApp = row.largadasApp
+        ? (row.dnfApp / row.largadasApp) * 100
+        : 0;
       return {
         ...row,
         puntos,
         victorias,
         dnf: dnfTotal,
         dnfTotal,
+        porcentajeDnfApp,
         iniciales: row.nombre.slice(0, 2).toUpperCase(),
       };
     })
@@ -720,6 +734,26 @@ export default function Home() {
     }),
     [worldStandings]
   );
+  const trophyStandings = useMemo(
+    () => [...worldStandings]
+      .filter((pilot) => Number(pilot.victorias ?? 0) > 0)
+      .sort((a, b) =>
+        Number(b.victorias ?? 0) - Number(a.victorias ?? 0) ||
+        a.nombre.localeCompare(b.nombre, "es")
+      ),
+    [worldStandings]
+  );
+  const digitalDnfStandings = useMemo(
+    () => [...worldStandings]
+      .filter((pilot) => Number(pilot.largadasApp ?? 0) > 0)
+      .sort((a, b) =>
+        Number(b.porcentajeDnfApp ?? 0) - Number(a.porcentajeDnfApp ?? 0) ||
+        Number(b.dnfApp ?? 0) - Number(a.dnfApp ?? 0) ||
+        Number(b.largadasApp ?? 0) - Number(a.largadasApp ?? 0) ||
+        a.nombre.localeCompare(b.nombre, "es")
+      ),
+    [worldStandings]
+  );
   const highestDnf = dnfStandings[0] || null;
   const activeHero = heroImages.length ? heroImages[heroIndex % heroImages.length] : null;
   const lastRace = activeSession?.races?.at(-1) || null;
@@ -1026,11 +1060,33 @@ export default function Home() {
           <div className="stack">
             <section className="panel">
               <div className="panel-head"><h2>Cazadores de trofeos</h2></div>
-              {ganadores.map((winner) => <div className="trofeo" key={winner.piloto}><strong>{winner.piloto}</strong><span>{winner.gps.length} victorias</span><small>{winner.gps.join(" · ")}</small></div>)}
+              {trophyStandings.map((winner) => (
+                <div className="trofeo" key={winner.driverId || winner.nombre}>
+                  <strong>{winner.nombre}</strong>
+                  <span>{winner.victorias} victorias</span>
+                  <small>
+                    {winner.victoriasBase ?? winner.victorias} del baseline histórico
+                    {Number(winner.victoriasApp ?? 0) > 0
+                      ? ` · ${winner.victoriasApp} desde el registro digital: ${winner.circuitosGanadosApp.join(" · ")}`
+                      : " · Sin victorias desde el registro digital"}
+                  </small>
+                </div>
+              ))}
             </section>
             <section className="panel">
-              <div className="panel-head"><h2>Rey del DNF</h2></div>
+              <div className="panel-head"><h2>Rey del DNF</h2><span>DNF históricos acumulados</span></div>
               {[...worldStandings].sort((a, b) => (b.dnfTotal ?? b.dnf) - (a.dnfTotal ?? a.dnf)).slice(0, 5).map((pilot, index) => <div className="mini-fila" key={pilot.nombre}><b>{index + 1}</b><span>{pilot.nombre}</span><strong>{pilot.dnfTotal ?? pilot.dnf}</strong></div>)}
+            </section>
+            <section className="panel">
+              <div className="panel-head"><h2>DNF por carreras corridas</h2><span>Desde el registro digital</span></div>
+              {digitalDnfStandings.length ? digitalDnfStandings.map((pilot, index) => (
+                <div className="dnf-rate-row" key={pilot.driverId || pilot.nombre}>
+                  <b>{index + 1}</b>
+                  <span>{pilot.nombre}</span>
+                  <small>{pilot.dnfApp}/{pilot.largadasApp}</small>
+                  <strong>{pilot.porcentajeDnfApp.toFixed(1).replace(".", ",")}%</strong>
+                </div>
+              )) : <p className="ayuda">Todavía no hay carreras en el registro digital.</p>}
             </section>
           </div>
         </div>
