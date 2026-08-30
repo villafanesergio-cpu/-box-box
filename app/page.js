@@ -762,6 +762,29 @@ export default function Home() {
       ),
     [worldStandings]
   );
+  const teamStandings = useMemo(() => {
+    const teams = new Map();
+
+    for (const pilot of worldStandings) {
+      if (!pilot.escuderia || pilot.escuderia === "Pendiente") continue;
+
+      const current = teams.get(pilot.escuderia) ?? {
+        name: pilot.escuderia,
+        logo: pilot.teamLogo,
+        points: 0,
+        drivers: [],
+      };
+
+      current.points += Number(pilot.puntos ?? 0);
+      current.drivers.push(pilot.nombre);
+      if (!current.logo && pilot.teamLogo) current.logo = pilot.teamLogo;
+      teams.set(pilot.escuderia, current);
+    }
+
+    return [...teams.values()].sort(
+      (a, b) => b.points - a.points || a.name.localeCompare(b.name, "es")
+    );
+  }, [worldStandings]);
   const highestDnf = dnfStandings[0] || null;
   const latestGp = recentGps[0] || null;
   const activeHero = heroImages.length ? heroImages[heroIndex % heroImages.length] : null;
@@ -1116,6 +1139,33 @@ export default function Home() {
             </section>
           </div>
         </div>
+        <section className="panel team-standings-panel">
+          <div className="panel-head">
+            <h2>Campeonato de equipos</h2>
+            <span>Suma de puntos de sus pilotos</span>
+          </div>
+          <div className="team-standings-table">
+            {teamStandings.map((team, index) => (
+              <article
+                className={`team-standings-row ${index === 0 ? "team-leader" : ""}`}
+                key={team.name}
+              >
+                <b>{index + 1}</b>
+                <span className="team-standings-logo">
+                  {team.logo && <img src={team.logo} alt={team.name} />}
+                </span>
+                <div>
+                  <strong>{team.name}</strong>
+                  <small>{team.drivers.join(" · ")}</small>
+                </div>
+                <em>{team.points}<small>PTS</small></em>
+              </article>
+            ))}
+            {!teamStandings.length && (
+              <p className="ayuda">Actualizando equipos desde Supabase…</p>
+            )}
+          </div>
+        </section>
       </section>
 
       <section className={`vista ${section === "carrera" ? "activa" : ""}`}>
