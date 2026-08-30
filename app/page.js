@@ -26,39 +26,6 @@ const publicDriverNames = {
   DODI: "Dodi",
 };
 
-const latestGpNews = [
-  {
-    circuit: "Suzuka",
-    winner: "Sergio",
-    title: "Sergio conquistó la Fecha 5",
-    text: "Ganó Suzuka y cerró la jornada con 45 puntos. Martín sumó 40 y Rodri 36.",
-  },
-  {
-    circuit: "Austria",
-    winner: "Martín",
-    title: "Martín completó el doblete de la noche",
-    text: "Después de imponerse en México, también ganó Austria y alcanzó cuatro GP ganados.",
-  },
-  {
-    circuit: "México",
-    winner: "Martín",
-    title: "Martín pegó primero en la cuarta fecha",
-    text: "Se quedó con el GP de México en la jornada compartida con Monza y Austria.",
-  },
-  {
-    circuit: "Monza",
-    winner: "Sergio",
-    title: "Sergio fue el más rápido en Monza",
-    text: "La victoria italiana fue su tercera antes de volver a ganar en Suzuka.",
-  },
-  {
-    circuit: "Hungría",
-    winner: "Rodri",
-    title: "La gran noche de Rodri",
-    text: "Ganó Hungría con 21 puntos; Nico terminó con 19 y Martín con 16.",
-  },
-];
-
 function comparePublicCircuitRows(a, b) {
   if (b.points !== a.points) return b.points - a.points;
   if (b.wins !== a.wins) return b.wins - a.wins;
@@ -74,7 +41,7 @@ function comparePublicCircuitRows(a, b) {
   return a.driverId.localeCompare(b.driverId);
 }
 
-function calculatePublicCircuitWinner(event) {
+function calculatePublicCircuitStandings(event) {
   const rows = new Map();
 
   const races = [...(event.races ?? [])].sort(
@@ -105,7 +72,7 @@ function calculatePublicCircuitWinner(event) {
     }
   }
 
-  return [...rows.values()].sort(comparePublicCircuitRows)[0]?.driverId ?? null;
+  return [...rows.values()].sort(comparePublicCircuitRows);
 }
 
 async function fetchPublicStandings(supabase) {
@@ -137,7 +104,7 @@ async function fetchPublicStandings(supabase) {
     supabase
       .from("circuit_events")
       .select(`
-        id,status,finalized_at,
+        id,name,round_number,event_date,status,finalized_at,
         circuit:circuits(name),
         races(
           id,race_number,
@@ -145,7 +112,8 @@ async function fetchPublicStandings(supabase) {
         )
       `)
       .eq("season_id", activeSeason.id)
-      .eq("status", "finalized"),
+      .eq("status", "finalized")
+      .order("finalized_at", { ascending: false }),
   ]);
 
   const error = assignmentsResult.error || baselinesResult.error || eventsResult.error;
@@ -185,13 +153,32 @@ async function fetchPublicStandings(supabase) {
     });
   }
 
+  const eventSummaries = [];
+
   for (const event of scoredEvents) {
-    const circuitWinnerId = calculatePublicCircuitWinner(event);
+    const circuitStandings = calculatePublicCircuitStandings(event);
+    const circuitWinnerRow = circuitStandings[0] ?? null;
+    const circuitWinnerId = circuitWinnerRow?.driverId ?? null;
     if (circuitWinnerId && calculated.has(circuitWinnerId)) {
       const circuitWinner = calculated.get(circuitWinnerId);
       circuitWinner.victoriasApp += 1;
       circuitWinner.circuitosGanadosApp.push(event.circuit?.name || "Circuito registrado");
     }
+
+    const racesWithResults = (event.races ?? []).filter(
+      (race) => (race.race_results ?? []).length > 0
+    );
+    eventSummaries.push({
+      id: event.id,
+      circuit: event.circuit?.name || event.name || "Circuito registrado",
+      eventName: event.name || event.circuit?.name || "GP registrado",
+      roundNumber: event.round_number,
+      eventDate: event.event_date,
+      finalizedAt: event.finalized_at,
+      winnerId: circuitWinnerId,
+      winnerPoints: Number(circuitWinnerRow?.points ?? 0),
+      raceCount: racesWithResults.length,
+    });
 
     for (const race of event.races ?? []) {
       for (const result of race.race_results ?? []) {
@@ -229,7 +216,20 @@ async function fetchPublicStandings(supabase) {
       return a.nombre.localeCompare(b.nombre, "es");
     });
 
-  return { standings, circuitCount: scoredEvents.length };
+  const recentGps = eventSummaries
+    .map((event) => ({
+      ...event,
+      winner: calculated.get(event.winnerId)?.nombre || "Sin ganador",
+    }))
+    .sort((a, b) => {
+      const finalizedDifference =
+        new Date(b.finalizedAt ?? 0).getTime() - new Date(a.finalizedAt ?? 0).getTime();
+      if (finalizedDifference !== 0) return finalizedDifference;
+      return Number(b.roundNumber ?? 0) - Number(a.roundNumber ?? 0);
+    })
+    .slice(0, 5);
+
+  return { standings, circuitCount: scoredEvents.length, recentGps };
 }
 
 function DriverAvatar({ pilot, className = "" }) {
@@ -613,6 +613,7 @@ export default function Home() {
   const [section, setSection] = useState("inicio");
   const [publicStandings, setPublicStandings] = useState([]);
   const [publicCircuitCount, setPublicCircuitCount] = useState(0);
+  const [recentGps, setRecentGps] = useState([]);
   const [publicStandingsLoaded, setPublicStandingsLoaded] = useState(false);
   const [heroImages, setHeroImages] = useState([]);
   const [heroIndex, setHeroIndex] = useState(0);
@@ -676,10 +677,11 @@ export default function Home() {
     let cancelled = false;
 
     fetchPublicStandings(supabase)
-      .then(({ standings, circuitCount }) => {
+      .then(({ standings, circuitCount, recentGps: loadedRecentGps }) => {
         if (cancelled) return;
         setPublicStandings(standings);
         setPublicCircuitCount(circuitCount);
+        setRecentGps(loadedRecentGps);
         setPublicStandingsLoaded(true);
       })
       .catch((error) => {
@@ -755,6 +757,7 @@ export default function Home() {
     [worldStandings]
   );
   const highestDnf = dnfStandings[0] || null;
+  const latestGp = recentGps[0] || null;
   const activeHero = heroImages.length ? heroImages[heroIndex % heroImages.length] : null;
   const lastRace = activeSession?.races?.at(-1) || null;
   const nextGrid = useMemo(
@@ -1013,7 +1016,17 @@ export default function Home() {
         <div className="resumen-grid">
           <article className="card"><span>Líder</span><strong>{worldStandings[0]?.nombre}</strong><small>{worldStandings[0]?.puntos} puntos</small></article>
           <article className="card"><span>Diferencia</span><strong>{(worldStandings[0]?.puntos || 0) - (worldStandings[1]?.puntos || 0)} pts</strong><small>{worldStandings[1]?.nombre} persigue</small></article>
-          <article className="card latest-gp-card"><span>Último GP</span><strong>SUZUKA</strong><small>Sergio ganó la Fecha 5</small></article>
+          <article className="card latest-gp-card">
+            <span>Último GP</span>
+            <strong>{latestGp?.circuit?.toUpperCase() || "—"}</strong>
+            <small>
+              {!publicStandingsLoaded
+                ? "Actualizando desde Supabase…"
+                : latestGp
+                  ? `${latestGp.winner} ganó${latestGp.roundNumber ? ` la Fecha ${latestGp.roundNumber}` : ""}`
+                  : "Sin GP finalizados"}
+            </small>
+          </article>
           <article className="card"><span>Más DNF</span><strong>{highestDnf?.nombre || "—"}</strong><small>{highestDnf?.dnfTotal ?? highestDnf?.dnf ?? 0} abandonos</small></article>
         </div>
 
@@ -1023,14 +1036,21 @@ export default function Home() {
             <Tabla lista={worldStandings} limite={6} />
           </section>
           <section className="panel noticias latest-news">
-            <div className="panel-head"><h2>Últimos 5 GP</h2><span>Historia reciente</span></div>
-            {latestGpNews.map((item) => (
-              <article key={item.circuit}>
+            <div className="panel-head"><h2>Últimos 5 GP</h2><span>Desde el registro digital</span></div>
+            {recentGps.map((item) => (
+              <article key={item.id}>
                 <small>{item.circuit} · GANÓ {item.winner}</small>
-                <strong>{item.title}</strong>
-                <p>{item.text}</p>
+                <strong>{item.eventName}</strong>
+                <p>
+                  {item.winner} sumó {item.winnerPoints} puntos en {item.raceCount}{" "}
+                  {item.raceCount === 1 ? "carrera" : "carreras"}.
+                </p>
               </article>
             ))}
+            {!publicStandingsLoaded && <p className="ayuda">Actualizando desde Supabase…</p>}
+            {publicStandingsLoaded && !recentGps.length && (
+              <p className="ayuda">Todavía no hay GP finalizados en el registro digital.</p>
+            )}
           </section>
         </div>
 
