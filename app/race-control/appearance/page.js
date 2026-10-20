@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
+import { assertStaticUpload, staticImageUrl } from "../../../lib/media";
 import styles from "./appearance.module.css";
 
 function safeFileName(name) {
@@ -70,6 +71,7 @@ export default function AppearancePage() {
 
   async function uploadMedia(file, folder) {
     if (!file) throw new Error("Elegí un archivo.");
+    assertStaticUpload(file);
 
     const extension = file.name.includes(".")
       ? file.name.split(".").pop().toLowerCase()
@@ -239,11 +241,11 @@ export default function AppearancePage() {
           </label>
 
           <label>
-            Imagen de fondo · JPG, PNG, WebP o GIF
+            Imagen de fondo · JPG, PNG o WebP
             <input
               required
               type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
+              accept="image/jpeg,image/png,image/webp"
               onChange={(event) => setHeroFile(event.target.files?.[0] ?? null)}
             />
           </label>
@@ -280,11 +282,11 @@ export default function AppearancePage() {
           </label>
 
           <label>
-            Logo · JPG, PNG, WebP, GIF o SVG
+            Logo · JPG, PNG, WebP o SVG
             <input
               required
               type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+              accept="image/jpeg,image/png,image/webp,image/svg+xml"
               onChange={(event) => setSponsorFile(event.target.files?.[0] ?? null)}
             />
           </label>
@@ -305,7 +307,7 @@ export default function AppearancePage() {
           <div className={styles.heroList}>
             {heroImages.map((row) => (
               <article className={row.active ? "" : styles.inactive} key={row.id}>
-                <img src={row.image_url} alt={row.title} />
+                <img src={staticImageUrl(row.image_url) || "/box-box-logo.png"} alt={row.title} />
                 <div><strong>{row.title}</strong><small>{row.active ? "ACTIVO" : "PAUSADO"}</small></div>
                 <button type="button" onClick={() => toggleHero(row)}>{row.active ? "Pausar" : "Activar"}</button>
                 <button type="button" className={styles.danger} onClick={() => deleteHero(row)}>Eliminar</button>
@@ -324,7 +326,7 @@ export default function AppearancePage() {
           <div className={styles.sponsorList}>
             {sponsors.map((row) => (
               <article className={row.active ? "" : styles.inactive} key={row.id}>
-                <img src={row.logo_url} alt={row.name} />
+                <img src={staticImageUrl(row.logo_url) || "/box-box-logo.png"} alt={row.name} />
                 <div><strong>{row.name}</strong><small>{row.active ? "ACTIVO" : "PAUSADO"}</small></div>
                 <button type="button" onClick={() => toggleSponsor(row)}>{row.active ? "Pausar" : "Activar"}</button>
                 <button type="button" className={styles.danger} onClick={() => deleteSponsor(row)}>Eliminar</button>

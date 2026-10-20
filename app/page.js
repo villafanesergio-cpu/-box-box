@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { circuitos2026, ganadores, pilotos } from "../lib/boxbox-data";
+import { getDriverPoster, staticImageUrl } from "../lib/media";
 import { createClient } from "../lib/supabase/client";
 import {
   LIVE_CHANNEL,
@@ -95,7 +96,7 @@ async function fetchPublicStandings(supabase) {
       .from("season_driver_teams")
       .select(`
         id,racing_number,active,
-        driver:drivers(id,name,photo_background_url,photo_transparent_url,celebration_media_url,active),
+        driver:drivers(id,name,photo_background_url,photo_transparent_url,active),
         team:teams(id,name,logo_url,primary_color,secondary_color,active)
       `)
       .eq("season_id", activeSeason.id)
@@ -143,8 +144,7 @@ async function fetchPublicStandings(supabase) {
       nombre: driverName,
       numero: assignment.racing_number,
       foto: assignment.driver.photo_transparent_url,
-      photoBackgroundUrl: assignment.driver.photo_background_url,
-      celebrationMediaUrl: assignment.driver.celebration_media_url,
+      photoBackgroundUrl: getDriverPoster(assignment.driver.name, assignment.driver.photo_background_url),
       escuderia: assignment.team.name,
       teamLogo: assignment.team.logo_url,
       puntosBase: Number(baseline?.base_points ?? 0),
@@ -254,26 +254,12 @@ function DriverAvatar({ pilot, className = "" }) {
   );
 }
 
-function DriverCelebration({ pilot }) {
-  const mediaUrl =
-    pilot?.celebrationMediaUrl ||
-    pilot?.photoBackgroundUrl ||
-    pilot?.foto ||
-    "";
-
-  if (!mediaUrl) {
-    return <DriverAvatar pilot={pilot} className="profile-photo" />;
-  }
-
-  const isVideo = /\.(mp4|webm)(\?|$)/i.test(mediaUrl);
-
+function DriverPoster({ pilot }) {
+  const mediaUrl = staticImageUrl(pilot?.photoBackgroundUrl) || staticImageUrl(pilot?.foto);
+  if (!mediaUrl) return <DriverAvatar pilot={pilot} className="profile-photo" />;
   return (
-    <div className="driver-celebration" aria-label={`Animación de ${pilot?.nombre || "piloto"}`}>
-      {isVideo ? (
-        <video src={mediaUrl} muted autoPlay loop playsInline />
-      ) : (
-        <img src={mediaUrl} alt={pilot?.nombre || "Piloto"} />
-      )}
+    <div className="driver-celebration" aria-label={`Póster de ${pilot?.nombre || "piloto"}`}>
+      <img src={mediaUrl} alt={`Póster de ${pilot?.nombre || "piloto"}`} loading="lazy" decoding="async" />
     </div>
   );
 }
@@ -654,14 +640,14 @@ export default function Home() {
       if (cancelled) return;
 
       if (!heroResult.error) {
-        setHeroImages(heroResult.data ?? []);
+        setHeroImages((heroResult.data ?? []).filter((row) => staticImageUrl(row.image_url)));
         setHeroIndex(0);
       } else {
         console.error("No se pudieron cargar los fondos", heroResult.error);
       }
 
       if (!sponsorResult.error) {
-        setSponsors(sponsorResult.data ?? []);
+        setSponsors((sponsorResult.data ?? []).filter((row) => !row.logo_url || staticImageUrl(row.logo_url)));
       } else {
         console.error("No se pudieron cargar los sponsors", sponsorResult.error);
       }
@@ -1362,10 +1348,10 @@ export default function Home() {
       <section className={`vista ${section === "pilotos" ? "activa" : ""}`}>
         <div className="titulo-seccion"><span>👤</span><div><h1>Pilotos</h1><p>Foto, número, escudería y rendimiento.</p></div></div>
         <div className="pilotos-grid">
-          {worldStandings.map((pilot) => (
+          {section === "pilotos" && worldStandings.map((pilot) => (
             <article className="piloto-card" key={pilot.nombre}>
               <div className="foto-placeholder">
-                <DriverCelebration pilot={pilot} />
+                <DriverPoster pilot={pilot} />
               </div>
               <div className="numero">#{pilot.numero}</div>
               <h3>{pilot.nombre}</h3><p>{pilot.escuderia}</p>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../../lib/supabase/client";
+import { assertStaticUpload, getDriverPoster } from "../../../lib/media";
 import styles from "./drivers.module.css";
 
 const DRIVING_STYLES = [
@@ -29,7 +30,6 @@ const EMPTY_FORM = {
   active: true,
   photoBackgroundUrl: "",
   photoTransparentUrl: "",
-  celebrationMediaUrl: "",
 };
 
 function safeFileName(name) {
@@ -73,7 +73,6 @@ export default function DriversPage() {
   const [files, setFiles] = useState({
     background: null,
     transparent: null,
-    celebration: null,
   });
   const [editingId, setEditingId] = useState(null);
   const [editingAssignmentId, setEditingAssignmentId] = useState(null);
@@ -150,7 +149,7 @@ export default function DriversPage() {
         .order("name", { ascending: true }),
       supabase
         .from("drivers")
-        .select("id, name, driving_style, custom_driving_style, photo_background_url, photo_transparent_url, face_photo_url, celebration_media_url, active, created_at")
+        .select("id, name, driving_style, custom_driving_style, photo_background_url, photo_transparent_url, face_photo_url, active, created_at")
         .order("name", { ascending: true }),
       supabase
         .from("season_driver_teams")
@@ -179,12 +178,13 @@ export default function DriversPage() {
   }
 
   function updateFile(field, file) {
+    try { assertStaticUpload(file); } catch (error) { setMessage(error.message); return; }
     setFiles((current) => ({ ...current, [field]: file }));
   }
 
   function resetForm() {
     setForm(EMPTY_FORM);
-    setFiles({ background: null, transparent: null, celebration: null });
+    setFiles({ background: null, transparent: null });
     setEditingId(null);
     setEditingAssignmentId(null);
     setMessage("");
@@ -200,17 +200,17 @@ export default function DriversPage() {
       drivingStyle: row.driving_style,
       customDrivingStyle: row.custom_driving_style ?? "",
       active: row.active,
-      photoBackgroundUrl: row.photo_background_url ?? "",
+      photoBackgroundUrl: getDriverPoster(row.name, row.photo_background_url) ?? "",
       photoTransparentUrl: row.photo_transparent_url ?? "",
-      celebrationMediaUrl: row.celebration_media_url ?? "",
     });
-    setFiles({ background: null, transparent: null, celebration: null });
+    setFiles({ background: null, transparent: null });
     setMessage(`Editando ${row.name}.`);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function uploadMedia(file, folder, fallbackUrl) {
     if (!file) return fallbackUrl || null;
+    assertStaticUpload(file);
 
     const extension = file.name.includes(".")
       ? file.name.split(".").pop().toLowerCase()
@@ -254,10 +254,9 @@ export default function DriversPage() {
     setMessage(editingId ? "Guardando cambios..." : "Creando piloto...");
 
     try {
-      const [backgroundUrl, transparentUrl, celebrationUrl] = await Promise.all([
+      const [backgroundUrl, transparentUrl] = await Promise.all([
         uploadMedia(files.background, "background", form.photoBackgroundUrl),
         uploadMedia(files.transparent, "transparent", form.photoTransparentUrl),
-        uploadMedia(files.celebration, "celebration", form.celebrationMediaUrl),
       ]);
 
       const driverPayload = {
@@ -267,7 +266,7 @@ export default function DriversPage() {
           form.drivingStyle === "Personalizado" ? form.customDrivingStyle.trim() : null,
         photo_background_url: backgroundUrl,
         photo_transparent_url: transparentUrl,
-        celebration_media_url: celebrationUrl,
+        celebration_media_url: null,
         active: form.active,
       };
 
@@ -471,14 +470,7 @@ export default function DriversPage() {
               onChange={(file) => updateFile("transparent", file)}
             />
 
-            <MediaInput
-              label="Animación de celebración"
-              help="MP4, WebM o GIF. Si no cargás nada, se usará la foto con fondo."
-              accept="video/mp4,video/webm,image/gif"
-              file={files.celebration}
-              existingUrl={form.celebrationMediaUrl}
-              onChange={(file) => updateFile("celebration", file)}
-            />
+
 
           </div>
 

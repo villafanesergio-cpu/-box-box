@@ -211,3 +211,6 @@ button:disabled{opacity:.42;cursor:not-allowed!important}
   .sponsor-track strong{font-size:9px}
   .foto-placeholder{height:260px}
 }
+
+/* Keep the complete vertical poster visible, including name and number. */
+.piloto-card .foto-placeholder{height:auto;aspect-ratio:9/16}
