@@ -9,3 +9,8 @@ instalar*.js
 instalar.cmd
 precargar-circuitos-2026.sql
 public/circuits/2026/
+
+playwright-report/
+test-results/
+
+supabase/.temp/
