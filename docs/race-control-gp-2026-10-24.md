@@ -15,9 +15,9 @@ La sugerencia de tipo ayuda a pasar de sprint a cinco cortas y final; el operado
 
 El historial muestra tipo, modo de parrilla, clasificación y revisiones de boxes. Las carreras previas aparecen como **Formato anterior (sin tipo registrado)**: no se deduce ni se rellena su fase. Al corregir resultados antiguos se conservan la parrilla original y sus metadatos nulos. La numeración continúa desde el máximo existente, incluso si hubo eliminaciones.
 
-## Activación (pendiente; no ejecutada en producción)
+## Activación
 
-1. Aplicar el contenido completo de `supabase/migrations/20261021164634_race_control_format.sql` en el entorno que se vaya a desplegar, primero en una base de prueba. Es una transacción: agrega una columna nullable a `races` y la función `save_race_control`; no actualiza filas, puntos, resultados, vistas ni políticas existentes. Puede ejecutarse nuevamente.
+1. Aplicar en orden `supabase/migrations/20261021164634_race_control_format.sql` y `supabase/migrations/20261023105704_race_control_restrict_anonymous_execution.sql`. La segunda revoca el permiso explícito que Supabase puede conceder por defecto al rol `anon`, conservando el acceso de usuarios autenticados sujeto a RLS. Aplicar el contenido completo de ambas migraciones en el entorno que se vaya a desplegar, primero en una base de prueba. Es una transacción: agrega una columna nullable a `races` y la función `save_race_control`; no actualiza filas, puntos, resultados, vistas ni políticas existentes. Puede ejecutarse nuevamente.
 2. Verificar las políticas reales de las tablas en ese entorno: la función usa **SECURITY INVOKER**, exige usuario autenticado y respeta RLS. El rol autenticado necesita los permisos que Race Control ya usa para eventos, carreras, parrillas y resultados. No ampliar RLS para resolver fallos de permisos.
 3. Integrar y desplegar la rama de aplicación después de la migración. La nueva interfaz necesita la función; si falta, muestra un error y conserva el editor, sin guardar parcialmente. El código anterior es compatible con la columna adicional.
 4. Ensayar el recorrido en un entorno separado antes del evento. No usar jornadas históricas reales como datos de prueba.
