@@ -4,12 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "../../../lib/supabase/client";
 import styles from "./race.module.css";
-
-function pointsFor(position, starters, status, penalty) {
-  if (status === "dnf") return { base: 0, final: 0 };
-  const base = Math.max(starters - position + 1, 1);
-  return { base, final: Math.max(base + Number(penalty || 0), 0) };
-}
+import { RACE_TYPES, PIT_LABELS, pointsFor, nextRaceNumber, suggestedType,
+  defaultGridMode, buildGrid, makeRaceControl } from "../../../lib/race-format.mjs";
 
 function formatEventDate(value) {
   if (!value) return "Día sin cargar";
@@ -33,6 +29,13 @@ export default function RaceDirectionPage() {
   const [gridOrder, setGridOrder] = useState([]);
   const [racePhase, setRacePhase] = useState(null);
   const [editingRace, setEditingRace] = useState(null);
+  const [raceType, setRaceType] = useState("sprint");
+  const [gridMode, setGridMode] = useState("manual");
+  const [qualifyingOrder, setQualifyingOrder] = useState([]);
+  const [preparedGrid, setPreparedGrid] = useState([]);
+  const [previousRaceId, setPreviousRaceId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [message, setMessage] = useState("Cargando Dirección de Carrera...");
   const [opening, setOpening] = useState(false);
   const openingRef = useRef(false);
@@ -100,6 +103,15 @@ export default function RaceDirectionPage() {
       supabase.from("races").select("*,race_results(*)").eq("event_id", eventId).order("race_number")
     ]);
 
+    setEntries([]);
+    setGridOrder([]);
+    setQualifyingOrder([]);
+    setRacePhase(null);
+    setEditingRace(null);
+    const nextType = suggestedType(raceRows ?? []);
+    setRaceType(nextType);
+    setGridMode(defaultGridMode(nextType, Boolean(raceRows?.length)));
+    setPreviousRaceId(null);
     setEvent(eventRows);
     setSelectedCircuit(eventRows?.circuit_id ?? "");
     setSelectedRound(eventRows?.round_number?.toString() ?? "");
@@ -186,6 +198,8 @@ export default function RaceDirectionPage() {
 
     setEvent(created);
     setRaces([]);
+    setRaceType("sprint");
+    setGridMode("manual");
     openingRef.current = false;
     setOpening(false);
     setMessage("Circuito abierto.");
@@ -382,30 +396,32 @@ export default function RaceDirectionPage() {
 
   async function prepareRace() {
     const active = drivers.filter(d => selectedDrivers.includes(d.driver.id));
-    const activeById = new Map(active.map(d => [d.driver.id, d]));
-    let grid = active;
-
-    if (races.length) {
-      const previousRace = races[races.length - 1];
-      const { data: previousResults, error } = await supabase
-        .from("race_results")
-        .select("driver_id,finish_position,status")
-        .eq("race_id", previousRace.id)
-        .order("finish_position", { ascending: true, nullsFirst: false });
-
-      if (error) {
-        setMessage(`No se pudo preparar la parrilla: ${error.message}`);
+    if (active.length < 2) {
+      setMessage("Se necesitan al menos dos pilotos activos.");
+      return;
+    }
+    let previousResults = null;
+    const previousRace = races.at(-1);
+    if (gridMode === "inverted") {
+      if (!previousRace) {
+        setMessage("No hay una carrera anterior para invertir la parrilla.");
         return;
       }
-
-      const ordered = (previousResults ?? [])
-        .map(result => activeById.get(result.driver_id))
-        .filter(Boolean);
-      const included = new Set(ordered.map(d => d.driver.id));
-      const missing = active.filter(d => !included.has(d.driver.id));
-
-      grid = [...ordered].reverse().concat(missing);
+      if (raceType === "final" && !window.confirm(
+        "La final normalmente larga según la clasificación a una vuelta. ¿Usar parrilla invertida de la carrera anterior de todos modos?"
+      )) return;
+      const { data, error } = await supabase.from("race_results")
+        .select("driver_id,finish_position,status").eq("race_id", previousRace.id);
+      if (error) { setMessage(`No se pudo preparar la parrilla: ${error.message}`); return; }
+      previousResults = data;
     }
+    let grid;
+    try { grid = buildGrid(active, previousResults, gridMode); }
+    catch (error) { setMessage(error.message); return; }
+    setPreviousRaceId(gridMode === "inverted" ? previousRace.id : null);
+    setPreparedGrid(grid.map(d => d.driver.id));
+    // Qualifying is recorded independently, even when an inverted grid is selected.
+    if (raceType === "sprint" || raceType === "final") grid = active;
 
     const prepared = grid.map((d, index) => ({
       driverId: d.driver.id,
@@ -415,18 +431,28 @@ export default function RaceDirectionPage() {
       status: "finished",
       position: index + 1,
       penalty: 0,
+      pitStop: "",
     }));
 
     setGridOrder([]);
     setEntries(prepared);
-    setRacePhase("grid");
+    setQualifyingOrder([]);
+    setRacePhase(["sprint", "final"].includes(raceType) ? "qualifying" : "grid");
     setEditingRace(null);
-    setMessage(
-      races.length
-        ? "Parrilla invertida generada desde el resultado anterior."
-        : "Ordená la parrilla de la primera carrera y confirmala."
-    );
+    setMessage(["sprint", "final"].includes(raceType)
+      ? "Ordená el resultado de la clasificación y confirmalo. No otorga puntos."
+      : "Revisá la parrilla y confirmala antes de cargar resultados.");
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function confirmQualifying() {
+    setQualifyingOrder(entries.map(entry => entry.driverId));
+    if (gridMode === "inverted") {
+      const byId = new Map(entries.map(entry => [entry.driverId, entry]));
+      setEntries(preparedGrid.map((id, index) => ({ ...byId.get(id), position: index + 1 })));
+    }
+    setRacePhase("grid");
+    setMessage("Clasificación registrada. Revisá y confirmá la parrilla de salida.");
   }
 
   function confirmGrid() {
@@ -465,71 +491,55 @@ export default function RaceDirectionPage() {
       return;
     }
 
-    const raceNumber = editingRace?.race_number ?? races.length + 1;
-    const { data: userData } = await supabase.auth.getUser();
-
-    let raceId = editingRace?.id;
-
-    if (editingRace) {
-      const { error } = await supabase.from("race_results").delete().eq("race_id", raceId);
-      if (error) { setMessage(error.message); return; }
-      await supabase.from("races").update({
-        status: "finished",
-        finished_at: new Date().toISOString()
-      }).eq("id", raceId);
-    } else {
-      const { data, error } = await supabase.from("races").insert({
-        event_id: event.id,
-        race_number: raceNumber,
-        status: "finished",
-        started_at: new Date().toISOString(),
-        finished_at: new Date().toISOString(),
-        created_by: userData?.user?.id ?? null,
-      }).select("id").single();
-
-      if (error) { setMessage(error.message); return; }
-      raceId = data.id;
+    let raceControl;
+    // Legacy races retain their null metadata; editing scores must not relabel history.
+    if (!editingRace || editingRace.race_control) {
+      try {
+        raceControl = makeRaceControl({ type: raceType, gridMode, qualifyingOrder,
+          entries, previousRaceId });
+      } catch (error) { setMessage(error.message); return; }
     }
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      const resultRows = entries.map((entry, index) => {
+        const points = pointsFor(index + 1, entries.length, entry.status, entry.penalty);
+        return {
+          driver_id: entry.driverId,
+          finish_position: index + 1,
+          status: entry.status,
+          base_points: points.base,
+          penalty_points: Number(entry.penalty || 0),
+          final_points: points.final,
+        };
+      });
 
-    const starterRows = gridOrder.map((driverId, index) => ({
-      race_id: raceId,
-      driver_id: driverId,
-      grid_position: index + 1,
-    }));
+      const { error: writeError } = await supabase.rpc("save_race_control", {
+        p_event_id: event.id,
+        p_race_id: editingRace?.id ?? null,
+        p_control: raceControl ?? null,
+        p_starters: gridOrder.map(driverId => ({ driver_id: driverId })),
+        p_results: resultRows,
+      });
+      if (writeError) {
+        setMessage(`No se guardó la carrera: ${writeError.message}`);
+        return;
+      }
 
-    const resultRows = entries.map((entry, index) => {
-      const points = pointsFor(index + 1, entries.length, entry.status, entry.penalty);
-      return {
-        race_id: raceId,
-        driver_id: entry.driverId,
-        finish_position: index + 1,
-        status: entry.status,
-        base_points: points.base,
-        penalty_points: Number(entry.penalty || 0),
-        final_points: points.final,
-      };
-    });
-
-    const writes = [supabase.from("race_results").insert(resultRows)];
-    if (!editingRace) {
-      writes.unshift(supabase.from("race_starters").insert(starterRows));
+      setEntries([]);
+      setGridOrder([]);
+      setRacePhase(null);
+      setEditingRace(null);
+      await loadEvent(event.id);
+      if (event.status === "finalized") await refreshEventHistory();
+      setMessage(editingRace ? "Carrera corregida." : "Carrera guardada.");
+    } catch (error) {
+      setMessage(`No se pudo guardar: ${error.message}`);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
-
-    const writeResults = await Promise.all(writes);
-    const writeError = writeResults.find(result => result.error)?.error;
-
-    if (writeError) {
-      setMessage(`Error: ${writeError.message}`);
-      return;
-    }
-
-    setEntries([]);
-    setGridOrder([]);
-    setRacePhase(null);
-    setEditingRace(null);
-    await loadEvent(event.id);
-    if (event.status === "finalized") await refreshEventHistory();
-    setMessage(editingRace ? "Carrera corregida." : "Carrera guardada.");
   }
 
   async function editRace(race) {
@@ -564,8 +574,13 @@ export default function RaceDirectionPage() {
         status: result.status,
         position: index + 1,
         penalty: result.penalty_points,
+        pitStop: race.race_control?.pit_stops?.[result.driver_id] ?? "",
       };
     }));
+    setRaceType(race.race_control?.type ?? "standard");
+    setGridMode(race.race_control?.grid_mode ?? "manual");
+    setQualifyingOrder(race.race_control?.qualifying_order ?? []);
+    setPreviousRaceId(race.race_control?.previous_race_id ?? null);
     setGridOrder((starters ?? []).map(starter => starter.driver_id));
     setRacePhase("result");
     setEditingRace(race);
@@ -741,13 +756,14 @@ export default function RaceDirectionPage() {
             <section className={styles.editor}>
               <div className={styles.panelHead}>
                 <div>
-                  <span>{racePhase === "grid" ? "PARRILLA" : "RESULTADO"}</span>
+                  <span>{racePhase === "qualifying" ? "CLASIFICACIÓN" : racePhase === "grid" ? "PARRILLA" : "RESULTADO"} · {RACE_TYPES[raceType]}</span>
                   <h2>
                     {editingRace
                       ? `Corregir Carrera ${editingRace.race_number}`
+                      : racePhase === "qualifying" ? `Clasificación Carrera ${nextRaceNumber(races)}`
                       : racePhase === "grid"
-                        ? `Parrilla Carrera ${races.length + 1}`
-                        : `Carrera ${races.length + 1}`}
+                        ? `Parrilla Carrera ${nextRaceNumber(races)}`
+                        : `Carrera ${nextRaceNumber(races)}`}
                   </h2>
                 </div>
                 <button onClick={() => {
@@ -755,9 +771,15 @@ export default function RaceDirectionPage() {
                   setGridOrder([]);
                   setRacePhase(null);
                   setEditingRace(null);
-                }}>Cancelar</button>
+                  const nextType = suggestedType(races);
+                  setRaceType(nextType);
+                  setGridMode(defaultGridMode(nextType, races.length > 0));
+                }} disabled={saving}>Cancelar</button>
               </div>
 
+              {racePhase === "qualifying" && <p>{raceType === "final" ? "Clasificación a una vuelta" : "Clasificación de aproximadamente 15 minutos"}: ordená a todos los pilotos de primero a último.</p>}
+              {racePhase === "grid" && <p>Parrilla {gridMode === "inverted" ? "invertida del resultado anterior" : "manual / clasificación"}. Podés ajustar el orden antes de confirmar.</p>}
+              {raceType === "final" && racePhase === "result" && <p>Verificación manual de la parada obligatoria para cada piloto. La aplicación no observa el videojuego ni aplica sanciones automáticas; usá la penalización habitual si corresponde.</p>}
               <div className={styles.resultList}>
                 {entries.map((entry, index) => {
                   const pts = pointsFor(index + 1, entries.length, entry.status, entry.penalty);
@@ -767,8 +789,8 @@ export default function RaceDirectionPage() {
                       className={racePhase === "result" && entry.status === "dnf" ? styles.dnf : ""}
                     >
                       <div className={styles.moveButtons}>
-                        <button onClick={() => move(index, -1)}>▲</button>
-                        <button onClick={() => move(index, 1)}>▼</button>
+                        <button aria-label={`Subir a ${entry.name}`} onClick={() => move(index, -1)}>▲</button>
+                        <button aria-label={`Bajar a ${entry.name}`} onClick={() => move(index, 1)}>▼</button>
                       </div>
                       <strong>
                         {racePhase === "result" && entry.status === "dnf" ? "DNF" : `${index + 1}°`}
@@ -778,8 +800,8 @@ export default function RaceDirectionPage() {
                       <div>
                         <b>{entry.name}</b>
                         <small>
-                          {racePhase === "grid"
-                            ? "Posición de largada"
+                          {racePhase !== "result"
+                            ? (racePhase === "qualifying" ? "Posición de clasificación" : "Posición de largada")
                             : `${pts.base} base · ${entry.penalty} penalización`}
                         </small>
                       </div>
@@ -808,10 +830,16 @@ export default function RaceDirectionPage() {
                             >+</button>
                           </div>
                           <strong>{pts.final} PTS</strong>
+                          {raceType === "final" && <label className={styles.pitStop}>Parada obligatoria · {entry.name}
+                            <select aria-label={`Parada obligatoria de ${entry.name}`} value={entry.pitStop} onChange={e => patchEntry(entry.driverId, { pitStop: e.target.value })}>
+                              <option value="">Pendiente de revisión</option>
+                              {Object.entries(PIT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                            </select>
+                          </label>}
                         </>
                       ) : (
                         <>
-                          <button disabled>PARRILLA</button>
+                          <button disabled>{racePhase === "qualifying" ? "CLASIFICACIÓN" : "PARRILLA"}</button>
                           <div className={styles.penalty}><span></span><span>—</span><span></span></div>
                           <strong>SALIDA</strong>
                         </>
@@ -823,9 +851,10 @@ export default function RaceDirectionPage() {
 
               <button
                 className={styles.openButton}
-                onClick={racePhase === "grid" ? confirmGrid : saveRace}
+                disabled={saving}
+                onClick={racePhase === "qualifying" ? confirmQualifying : racePhase === "grid" ? confirmGrid : saveRace}
               >
-                {racePhase === "grid"
+                {saving ? "GUARDANDO..." : racePhase === "qualifying" ? "CONFIRMAR CLASIFICACIÓN" : racePhase === "grid"
                   ? "CONFIRMAR PARRILLA"
                   : editingRace
                     ? "GUARDAR CORRECCIÓN"
@@ -833,7 +862,25 @@ export default function RaceDirectionPage() {
               </button>
             </section>
           ) : event.status !== "finalized" ? (
-            <button className={styles.prepare} onClick={prepareRace}>PREPARAR CARRERA {races.length + 1}</button>
+            <section className={styles.startPanel}>
+              <h2>Preparar carrera {nextRaceNumber(races)}</h2>
+              <p>Formato GP: clasificación ~15 min + sprint de 3 vueltas; cinco carreras de 5 vueltas con parrilla invertida; clasificación a una vuelta + final al 25% con parada obligatoria.</p>
+              <label>Tipo de carrera
+                <select value={raceType} onChange={e => {
+                  setRaceType(e.target.value);
+                  setGridMode(defaultGridMode(e.target.value, races.length > 0));
+                }}>
+                  {Object.entries(RACE_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              <label>Parrilla de salida
+                <select value={gridMode} onChange={e => setGridMode(e.target.value)}>
+                  <option value="manual">Manual / según clasificación</option>
+                  <option value="inverted" disabled={!races.length}>Invertida del resultado anterior</option>
+                </select>
+              </label>
+              <button className={styles.openButton} onClick={prepareRace}>PREPARAR CARRERA {nextRaceNumber(races)}</button>
+            </section>
           ) : (
             <div className={styles.archivedNotice}>
               Fecha archivada: podés corregir o eliminar las carreras cargadas desde el historial.
@@ -845,7 +892,13 @@ export default function RaceDirectionPage() {
             {!races.length && <p>Sin carreras todavía.</p>}
             {[...races].reverse().map(race => (
               <article key={race.id}>
-                <div><span>CARRERA {race.race_number}</span><strong>{race.race_results?.find(r => r.status === "finished" && r.finish_position === 1)?.final_points ?? "—"} pts al ganador</strong></div>
+                <div><span>CARRERA {race.race_number} · {RACE_TYPES[race.race_control?.type] ?? "Formato anterior (sin tipo registrado)"}</span>
+                  {race.race_control && <details><summary>Parrilla, clasificación y controles</summary>
+                    <p>Parrilla {race.race_control.grid_mode === "inverted" ? "invertida del resultado anterior" : "manual / clasificación"}</p>
+                    {race.race_control.qualifying_order?.length > 0 && <><b>Clasificación</b><ol>{race.race_control.qualifying_order.map(id => <li key={id}>{drivers.find(d => d.driver.id === id)?.driver.name ?? id}</li>)}</ol></>}
+                    {race.race_control.type === "final" && <><b>Parada obligatoria (revisión manual)</b><ul>{Object.entries(race.race_control.pit_stops ?? {}).map(([id, value]) => <li key={id}>{drivers.find(d => d.driver.id === id)?.driver.name ?? id}: {PIT_LABELS[value] ?? "Pendiente"}</li>)}</ul></>}
+                  </details>}
+                  <strong>{race.race_results?.find(r => r.status === "finished" && r.finish_position === 1)?.final_points ?? "—"} pts al ganador</strong></div>
                 <div>
                   <button onClick={() => editRace(race)}>Corregir</button>
                   <button onClick={() => deleteRace(race)}>Eliminar</button>
