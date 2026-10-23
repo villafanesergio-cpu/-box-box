@@ -8,6 +8,7 @@ const a = '00000000-0000-0000-0000-000000000002';
 const b = '00000000-0000-0000-0000-000000000003';
 const old = '00000000-0000-0000-0000-000000000004';
 const migration = await readFile(new URL('../supabase/migrations/20261021164634_race_control_format.sql',import.meta.url),'utf8');
+const permissionsMigration = await readFile(new URL('../supabase/migrations/20261023105704_race_control_restrict_anonymous_execution.sql',import.meta.url),'utf8');
 const entries = [{driverId:a,pitStop:'yes'}, {driverId:b,pitStop:'no',status:'dnf'}];
 const control = type => makeRaceControl({type,gridMode:type === 'short' ? 'inverted':'manual',previousRaceId:old,qualifyingOrder:[a,b],entries});
 const results = entries.map((entry,index) => {
@@ -20,6 +21,8 @@ test('migration and atomic save round trip: seven races, legacy preservation, ro
   try {
     await db.exec(`
       create role authenticated;
+      create role anon;
+      alter default privileges grant execute on functions to anon;
       create schema auth;
       create function auth.uid() returns uuid language sql as $$ select '${a}'::uuid $$;
       create table circuit_events(id uuid primary key);
@@ -33,6 +36,10 @@ test('migration and atomic save round trip: seven races, legacy preservation, ro
     `);
     await db.exec(migration);
     await db.exec(migration); // idempotent schema rollout
+    assert.equal((await db.query("select has_function_privilege('anon','public.save_race_control(uuid,uuid,jsonb,jsonb,jsonb)','execute') as allowed")).rows[0].allowed,true);
+    await db.exec(permissionsMigration);
+    assert.equal((await db.query("select has_function_privilege('anon','public.save_race_control(uuid,uuid,jsonb,jsonb,jsonb)','execute') as allowed")).rows[0].allowed,false);
+    assert.equal((await db.query("select has_function_privilege('authenticated','public.save_race_control(uuid,uuid,jsonb,jsonb,jsonb)','execute') as allowed")).rows[0].allowed,true);
     const before = (await db.query('select * from race_results where race_id=$1',[old])).rows;
     const save = async (type, id=null, rows=results) => (await db.query(
       'select save_race_control($1,$2,$3::jsonb,$4::jsonb,$5::jsonb) as id',
